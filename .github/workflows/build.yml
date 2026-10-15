@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -25,12 +25,29 @@ jobs:
         run: python -m py_compile scripts/build_geo.py
       - name: Merge upstream GeoIP and GeoSite
         run: python scripts/build_geo.py --output dist
-      - name: Check output sizes and manifest
+      - name: Generate SHA-256 checksums and verify build manifest
         run: |
           test -s dist/geoip.dat
           test -s dist/geosite.dat
           python -m json.tool dist/manifest.json >/dev/null
-          sha256sum dist/geoip.dat dist/geosite.dat > dist/SHA256SUMS
+          (
+            cd dist
+            sha256sum geoip.dat geosite.dat > SHA256SUMS
+            sha256sum geoip.dat | cut -d ' ' -f1 > geoip.dat.sha256
+            sha256sum geosite.dat | cut -d ' ' -f1 > geosite.dat.sha256
+            sha256sum --check SHA256SUMS
+          )
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path("dist")
+          manifest = json.loads((root / "manifest.json").read_text())
+          for file in ("geoip.dat", "geosite.dat"):
+              expected = manifest["sources_and_outputs"][f"output/{file.removesuffix('.dat')}"]["sha256"]
+              calculated = hashlib.sha256((root / file).read_bytes()).hexdigest()
+              small = (root / (file + ".sha256")).read_text().strip()
+              assert expected == calculated == small, f"Hash mismatch: {file}"
+              assert len(small) == 64
+          PY
           ls -lh dist/
       - name: Validate categories with Xray-core
         run: |
@@ -44,16 +61,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json, os, pathlib, urllib.request
+          import json, os, pathlib, urllib.error, urllib.request
           repo = os.environ["GITHUB_REPOSITORY"]
-          url = f"https://api.github.com/repos/{repo}/releases/tags/latest"
+          url = f"https://api.github.com/repos/{repo}/releases/latest"
           request = urllib.request.Request(url, headers={
               "Accept": "application/vnd.github+json",
               "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
               "User-Agent": "MESTO-GEO-CI"
           })
           try:
-              with urllib.request.urlopen(request, timeout=15) as response:
+              with urllib.request.urlopen(request, timeout=20) as response:
                   release = json.load(response)
           except urllib.error.HTTPError as error:
               if error.code == 404:
@@ -67,15 +84,51 @@ jobs:
               if previous and (current < previous * .65 or current > previous * 2):
                   raise SystemExit(f"Suspicious size regression: {filename}: previous={previous}, current={current}")
           PY
-      - name: Include source notices
+      - name: Include upstream license notices
         run: |
           mkdir -p dist/licenses
           cp LICENSE dist/licenses/GPL-3.0.txt
           cp licenses/RU-DIRECT-MIT.txt dist/licenses/RU-DIRECT-MIT.txt
-      - name: Publish stable rolling release
+      - name: Publish verified versioned release (draft -> latest)
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          gh release view latest >/dev/null 2>&1 || gh release create latest --target "$GITHUB_SHA" --title "MESTO GEO (latest)" --notes "Automated GeoIP and GeoSite builds. Routing rules require client-side testing before rollout." --latest
-          gh release upload latest dist/geoip.dat dist/geosite.dat dist/manifest.json dist/SHA256SUMS dist/licenses/GPL-3.0.txt dist/licenses/RU-DIRECT-MIT.txt --clobber
-          gh release view latest --json assets --jq '.assets[] | [.name, .size] | @tsv'
+          set -Eeuo pipefail
+          TAG="mesto-geo-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "Publishing release $TAG"
+          gh release create "$TAG" --draft --latest=false \
+            --target "$GITHUB_SHA" --title "MESTO GEO $TAG" \
+            --notes "Validated GeoIP and GeoSite database snapshot. See manifest.json and SHA256SUMS for provenance. Not yet approved for subscriber rollout."
+          gh release upload "$TAG" \
+            dist/geoip.dat dist/geosite.dat \
+            dist/geoip.dat.sha256 dist/geosite.dat.sha256 \
+            dist/manifest.json dist/SHA256SUMS \
+            dist/licenses/GPL-3.0.txt dist/licenses/RU-DIRECT-MIT.txt
+          gh release view "$TAG" --json assets > /tmp/mesto-release-assets.json
+          python - <<'PY'
+          import json, pathlib
+          info = json.loads(pathlib.Path("/tmp/mesto-release-assets.json").read_text())
+          remote = {asset["name"]: asset["size"] for asset in info["assets"]}
+          sources = [
+              pathlib.Path("dist/geoip.dat"),
+              pathlib.Path("dist/geosite.dat"),
+              pathlib.Path("dist/geoip.dat.sha256"),
+              pathlib.Path("dist/geosite.dat.sha256"),
+              pathlib.Path("dist/manifest.json"),
+              pathlib.Path("dist/SHA256SUMS"),
+              pathlib.Path("dist/licenses/GPL-3.0.txt"),
+              pathlib.Path("dist/licenses/RU-DIRECT-MIT.txt")
+          ]
+          for local in sources:
+              actual = remote.get(local.name)
+              expected = local.stat().st_size
+              if actual != expected:
+                  raise SystemExit(f"Draft asset missing/incomplete: {local.name} expected={expected}, found={actual}")
+          if len(remote) != len(sources):
+              raise SystemExit("Unexpected number of release assets")
+          print("All draft release assets verified")
+          PY
+          gh release edit "$TAG" --draft=false --latest
+          echo "Published $TAG as latest; prior published releases remain available."
