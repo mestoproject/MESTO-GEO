@@ -1,0 +1,13 @@
+# Domains served directly when possible. Review carefully before changing.
+domain:ozon.ru
+domain:ozon.com
+domain:wildberries.ru
+domain:wb.ru
+domain:vk.com
+domain:ok.ru
+domain:gosuslugi.ru
+domain:yandex.ru
+domain:yastatic.net
+domain:2gis.com
+domain:tbank.ru
+domain:sber.ru
