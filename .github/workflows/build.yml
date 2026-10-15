@@ -1,0 +1,36 @@
+name: Build MESTO GEO (test artifacts)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 4 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate Python source
+        run: python -m py_compile scripts/build_geo.py
+      - name: Merge upstream GeoIP and GeoSite
+        run: python scripts/build_geo.py --output dist
+      - name: Check output sizes
+        run: |
+          test -s dist/geoip.dat
+          test -s dist/geosite.dat
+          python -m json.tool dist/manifest.json >/dev/null
+          ls -lh dist/
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesto-geo-test
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
