@@ -1,0 +1,12 @@
+# Intentional VPN exceptions. Rules must precede MESTO-RU.
+domain:habr.com
+domain:4pda.to
+domain:4pda.ru
+domain:theins.ru
+domain:tvrain.ru
+domain:moscowtimes.ru
+domain:novayagazeta.ru
+domain:snob.ru
+domain:kemono.su
+domain:jut.su
+domain:kara.su
