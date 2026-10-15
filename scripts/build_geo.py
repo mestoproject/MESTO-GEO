@@ -212,7 +212,6 @@ def build(outdir: pathlib.Path):
     _, nsites = originals["runet"]["geosite"]
     bip, bips = originals["base"]["geoip"]
     _, rips = originals["ru_direct"]["geoip"]
-    _, nips = originals["runet"]["geoip"]
 
     sites = {
         "mesto-ru": (
@@ -227,7 +226,6 @@ def build(outdir: pathlib.Path):
         "mesto-ru": (
             required(bips, "ru", "base")
             + required(rips, "ru-standard", "ru_direct")
-            + required(nips, "ru-whitelist", "runet")
         )
     }
 
