@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Validate Python source
@@ -27,6 +27,13 @@ jobs:
           test -s dist/geosite.dat
           python -m json.tool dist/manifest.json >/dev/null
           ls -lh dist/
+      - name: Validate categories with Xray-core
+        run: |
+          curl -fsSL --retry 3 https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o /tmp/xray.zip
+          mkdir -p /tmp/mesto-xray
+          unzip -q /tmp/xray.zip xray -d /tmp/mesto-xray
+          chmod +x /tmp/mesto-xray/xray
+          XRAY_LOCATION_ASSET="$PWD/dist" /tmp/mesto-xray/xray run -test -config ci/xray-validation.json
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
