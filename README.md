@@ -1,7 +1,7 @@
 # MESTO GEO
 
 Experimental combined Xray GeoSite and GeoIP databases for MESTO VPN.
-**Do not deploy to subscribers until Happ and INCY routing templates are verified on real devices.** The rolling release is public but unapproved for production distribution.
+**Do not deploy to subscribers until Happ and INCY routing templates are verified on real devices.** Current published releases remain experimental until client routing tests.
 
 ## Included sources
 
@@ -22,7 +22,27 @@ Do **not** direct `ru-blocked`, `ru-blocked-all`, or `ru-whitelist` as a blanket
 ## Build
 
 Run `python3 scripts/build_geo.py --output dist` (Python 3.10+; external network required).
-CI workflow runs daily 04:15 UTC and on demand, checks the DAT files using Xray-core and publishes a rolling GitHub Release tagged `latest`. It refuses unexpectedly large size changes compared with the previous release. RemnaWave subscriptions are unchanged until client-side validation.\n\nDownload links:\n- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geoip.dat\n- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geosite.dat\n- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/manifest.json\n\nA release will exist only after the first successful run of the new workflow.
+CI runs daily at 04:15 UTC and on manual dispatch. It builds and validates GeoIP/GeoSite against Xray-core, creates INCY sidecar SHA-256 files, uploads a **complete draft snapshot** to a versioned GitHub Release, and only then makes it the latest public release. Previous versions remain available for rollback.
+
+Latest published version:
+- https://github.com/mestoproject/MESTO-GEO/releases/latest
+- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geoip.dat
+- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geosite.dat
+- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geoip.dat.sha256
+- https://github.com/mestoproject/MESTO-GEO/releases/latest/download/geosite.dat.sha256
+
+**Important:** The old legacy tag `latest` is not deleted or overwritten. Stable `/releases/latest/download/` links follow GitHub's latest *published versioned release*, not the tag named latest. Verify the first successful new CI run before using these links.
+
+## Optional independent mirror
+
+Files in `mirror/` implement a verified Caddy mirror on a Linux VPS. The public host `geo.mestolink.com` is an example **not yet deployed or configured in DNS**.
+
+On a chosen VPS, install Caddy, curl, Python 3 and util-linux (`flock`); permit HTTPS 443. Copy `mirror/mesto-geo-mirror-sync.sh` to `/usr/local/sbin/mesto-geo-mirror-sync`, make it executable, copy the service and timer to `/etc/systemd/system/`, create a Caddy site based on `mirror/Caddyfile.example`, then run `systemctl daemon-reload && systemctl enable --now mesto-geo-mirror.timer && systemctl start mesto-geo-mirror.service`. Use HTTPS and confirm it serves both DAT files and matching SHA-256 sidecars. This mirror has an independent **copy** of the last good release, but obtaining new versions still depends on GitHub.
+
+Do not bind the mirror to a VPS port already in use by Reality, Caddy, or RemnaNode. A separate small VPS is usually simplest; if sharing a server, use an existing Caddy HTTPS virtual host and ensure there is no port conflict.
+
+Do not activate client configs until Happ and INCY profile integration and cache/failure behavior have been verified.
+
 
 ## Attribution and licenses
 
